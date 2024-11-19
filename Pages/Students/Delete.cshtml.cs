@@ -13,16 +13,20 @@ namespace ContosoUniversity.PagesStudents
     public class DeleteModel : PageModel
     {
         private readonly ContosoUniversity.Data.SchoolContext _context;
+        private readonly ILogger<DeleteModel> _logger;
 
-        public DeleteModel(ContosoUniversity.Data.SchoolContext context)
+        public DeleteModel(ContosoUniversity.Data.SchoolContext context,
+                           ILogger<DeleteModel> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
         [BindProperty]
         public Student Student { get; set; } = default!;
+        public string ErrorMessage { get; set; }
 
-        public async Task<IActionResult> OnGetAsync(int? id)
+        public async Task<IActionResult> OnGetAsync(int? id, bool? saveChangesError = false)
         {
             if (id == null)
             {
@@ -38,6 +42,12 @@ namespace ContosoUniversity.PagesStudents
                 return Page();
             }
 
+            if (saveChangesError.GetValueOrDefault())
+            {
+                ErrorMessage = String.Format("Delete {ID} failed. Try again", id);
+            }
+
+
             return NotFound();
         }
 
@@ -49,11 +59,24 @@ namespace ContosoUniversity.PagesStudents
             }
 
             var student = await _context.Students.FindAsync(id);
+
             if (student != null)
             {
                 Student = student;
-                _context.Students.Remove(Student);
                 await _context.SaveChangesAsync();
+                try
+                {
+                    _context.Students.Remove(Student);
+                    await _context.SaveChangesAsync();
+                    return RedirectToPage("./Index");
+                }
+                catch (DbUpdateException ex)
+                {
+                    _logger.LogError(ex, ErrorMessage);
+
+                    return RedirectToAction("./Delete",
+                                         new { id, saveChangesError = true });
+                }
             }
 
             return RedirectToPage("./Index");
